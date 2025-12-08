@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>y86-64 Simulator</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="css/index.css?v=10">
+  </head>
+  <body>
+
+    <div id="app"></div>
+
+<script type="text/template" id="default_y86_code">                            | # prog1: Simple addition test
+0x000: 30f20a00000000000000 |   irmovq $10,%rdx
+0x00a: 30f00300000000000000 |   irmovq  $3,%rax
+0x014: 10                   |   nop
+0x015: 10                   |   nop
+0x016: 10                   |   nop
+0x017: 6020                 |   addq %rdx,%rax
+0x019: 00                   |   halt
+    </script>
+
+    <script type="text/template" id="tmpl_app">
+        <div class="header">
+            <h1>Y86-64 Simulator</h1>
+            <div class="sample-selector">
+                <label for="sample-select">Sample Program:</label>
+                <select id="sample-select" class="sample-select">
+                    <option value="">-- Select a test file --</option>
+                    <option value="prog1.yo">prog1.yo - Simple addition</option>
+                    <option value="prog2.yo">prog2.yo - Program test 2</option>
+                    <option value="prog3.yo">prog3.yo - Program test 3</option>
+                    <option value="prog4.yo">prog4.yo - Program test 4</option>
+                    <option value="prog5.yo">prog5.yo - Program test 5</option>
+                    <option value="prog6.yo">prog6.yo - Program test 6</option>
+                    <option value="prog7.yo">prog7.yo - Program test 7</option>
+                    <option value="prog8.yo">prog8.yo - Program test 8</option>
+                    <option value="prog9.yo">prog9.yo - Program test 9</option>
+                    <option value="prog10.yo">prog10.yo - Program test 10</option>
+                    <option value="asum.yo">asum.yo - Array sum</option>
+                    <option value="asumi.yo">asumi.yo - Array sum (immediate)</option>
+                    <option value="asumr.yo">asumr.yo - Array sum (recursive)</option>
+                    <option value="abs-asum-cmov.yo">abs-asum-cmov.yo - Abs value (cmov)</option>
+                    <option value="abs-asum-jmp.yo">abs-asum-jmp.yo - Abs value (jump)</option>
+                    <option value="pushtest.yo">pushtest.yo - Push test</option>
+                    <option value="poptest.yo">poptest.yo - Pop test</option>
+                    <option value="pushquestion.yo">pushquestion.yo - Push question</option>
+                    <option value="j-cc.yo">j-cc.yo - Jump condition codes</option>
+                    <option value="cjr.yo">cjr.yo - Conditional jump/return</option>
+                    <option value="ret-hazard.yo">ret-hazard.yo - Return hazard</option>
+                </select>
+            </div>
+            <div class="actions">
+                <button class="compile"><i class="fa fa-bolt"></i> Load</button>
+                <button class="reset"><i class="fa fa-repeat"></i> Reset</button>
+                <button class="step"><i class="fa fa-angle-right"></i> Step</button>
+                <button class="continue"><i class="fa fa-angle-double-right"></i> <span>Start</span></button>
+            </div>
+            <div class="links">
+                <a href="https://github.com/boginw/js-y86">GitHub <i class="fa fa-github"></i></a>
+            </div>
+        </div>
+        <div class="app-body">
+            <div class="left-panel">
+                <div class="editor"></div>
+                <div class="json-output"></div>
+            </div>
+            <div class="inspector"></div>
+            <div class="memory"></div>
+        </div>
+    </script>
+
+    <script type="text/template" id="tmpl_editor">
+        <h2>Source code</h2>
+        <div class="code"><%= code %></div>
+    </script>
+
+    <script type="text/template" id="tmpl_json_output">
+        <h2>CPU State (JSON)</h2>
+        <div class="json-content"><pre><%= json %></pre></div>
+    </script>
+
+    <script type="text/template" id="tmpl_inspector">
+        <div class="object"></div>
+        <div class="registers-wrapper"></div>
+    </script>
+
+    <script type="text/template" id="tmpl_memory">
+        <h2>Memory</h2>
+        <div class="mem-header">
+            <div class="address">Addr</div>
+            <div class="value">Value</div>
+        </div>
+        <div class="mem-words-wrapper">
+            <div class="mem-words">
+                <div class="stack-pointers">
+                    <div class="rbp"><i class="fa fa-caret-left"></i> RBP</div>
+                    <div class="rsp"><i class="fa fa-caret-left"></i> RSP</div>
+                </div>
+            </div>
+        </div>
+    </script>
+
+    <script type="text/template" id="tmpl_object_code">
+        <h2>Object code</h2>
+        <div class="lines-wrapper">
+            <div class="lines"></div>
+        </div>
+    </script>
+
+    <script type="text/template" id="tmpl_object_code_error">
+        <div class="line-no">Line <%= lineno %></div>
+        <div class="source"><%= source %></div>
+    </script>
+
+    <script type="text/template" id="tmpl_mem_word">
+        <div class="address"><%= address %></div>
+        <div class="value"><%= value %></div>
+    </script>
+
+    <script type="text/template" id="tmpl_registers">
+        <div class="column register_column">
+            <h3>Registers</h3>
+            <div class="register_holder">
+                <div class="register">
+                    <div class="label">%rax</div>
+                    <div class="value_hex"><%= rax_hex %></div>
+                    <div class="value_dec"><%= rax_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%rcx</div>
+                    <div class="value_hex"><%= rcx_hex %></div>
+                    <div class="value_dec"><%= rcx_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%rdx</div>
+                    <div class="value_hex"><%= rdx_hex %></div>
+                    <div class="value_dec"><%= rdx_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%rbx</div>
+                    <div class="value_hex"><%= rbx_hex %></div>
+                    <div class="value_dec"><%= rbx_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%rsp</div>
+                    <div class="value_hex"><%= rsp_hex %></div>
+                    <div class="value_dec"><%= rsp_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%rbp</div>
+                    <div class="value_hex"><%= rbp_hex %></div>
+                    <div class="value_dec"><%= rbp_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%rsi</div>
+                    <div class="value_hex"><%= rsi_hex %></div>
+                    <div class="value_dec"><%= rsi_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%rdi</div>
+                    <div class="value_hex"><%= rdi_hex %></div>
+                    <div class="value_dec"><%= rdi_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%r8</div>
+                    <div class="value_hex"><%= r8_hex %></div>
+                    <div class="value_dec"><%= r8_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%r9</div>
+                    <div class="value_hex"><%= r9_hex %></div>
+                    <div class="value_dec"><%= r9_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%r10</div>
+                    <div class="value_hex"><%= r10_hex %></div>
+                    <div class="value_dec"><%= r10_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%r11</div>
+                    <div class="value_hex"><%= r11_hex %></div>
+                    <div class="value_dec"><%= r11_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%r12</div>
+                    <div class="value_hex"><%= r12_hex %></div>
+                    <div class="value_dec"><%= r12_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%r13</div>
+                    <div class="value_hex"><%= r13_hex %></div>
+                    <div class="value_dec"><%= r13_dec %></div>
+                </div>
+                <div class="register">
+                    <div class="label">%r14</div>
+                    <div class="value_hex"><%= r14_hex %></div>
+                    <div class="value_dec"><%= r14_dec %></div>
+                </div>
+            </div>
+
+        </div>
+        <div class="column status_column">
+            <h3>Flags</h3>
+            <div class="flags">
+                <div class="flag">
+                    <div class="label">SF</div>
+                    <div class="value"><%= sf %></div>
+                </div>
+                <div class="flag">
+                    <div class="label">ZF</div>
+                    <div class="value"><%= zf %></div>
+                </div>
+                <div class="flag">
+                    <div class="label">OF</div>
+                    <div class="value"><%= of %></div>
+                </div>
+            </div>
+            <h3 class="status_header">Status</h3>
+            <div class="status">
+                <div class="label">STAT</div>
+                <div class="value"><%= stat %></div>
+            </div>
+            <div class="err">
+                <div class="label">ERR</div>
+                <div class="value"><%= err %></div>
+            </div>
+            <div class="pc">
+                <div class="label">PC</div>
+                <div class="value"><%= pc %></div>
+            </div>
+        </div>
+    </script>
+
+    <script src="js/external/jquery.min.js"></script>
+    <script src="js/underscore.js"></script>
+    <script src="js/external/backbone-min.js"></script>
+    <script src="js/long.js"></script>
+
+    <script src="js/ace/ace.js"></script>
+
+    <!-- Original y86.js (provides helper functions) -->
+    <script src="js/y86.js"></script>
+
+    <!-- General utilities -->
+    <script src="js/general.js"></script>
+
+    <!-- CPU Backend Adapter (overrides INIT/STEP/RUN/RESET with backend API calls) -->
+    <script src="js/cpu-backend-adapter.js?v=3"></script>
+
+    <script src="js/views/app.js?v=5"></script>
+    <script src="js/views/editor.js?v=9"></script>
+    <script src="js/views/jsonoutput.js?v=12"></script></script>
+    <script src="js/views/inspector.js"></script>
+    <script src="js/views/memory.js"></script>
+    <script src="js/views/registers.js"></script>
+    <script src="js/views/objcode.js"></script>
+
+    <script>
+        $(function () {
+            var app = new AppView();
+            $('#app').append(app.$el);
+        });
+
+        // Don't lose unsaved work!
+        window.onbeforeunload = function () {
+            localStorage.y86_64_sim_src = editor.getSource();
+        }
+    </script>
+  </body>
+</html>
+
+
